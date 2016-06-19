@@ -215,3 +215,5 @@ pip-log.txt
 #Mr Developer
 .mr.developer.cfg
 Rprogramming/ExploratoryDataAnalysis1/Data/household_power_consumption.txt
+Rprogramming/RepData_PeerAssesment2/repdata-data-StormData.csv
+Rprogramming/RepData_PeerAssesment2/repdata-data-StormData.csv.bz2

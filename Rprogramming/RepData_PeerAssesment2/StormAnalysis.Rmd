@@ -1,0 +1,204 @@
+---
+title: Public health and economic problems derived from storms and other severe weather
+  events in the USA; Tornadoes most lethal, floods most economically damaging
+author: "Carolina A Tarraga"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    fig_caption: yes
+    fig_height: 6
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+---
+```{r Libraries, message=FALSE, warning=FALSE, include=FALSE}
+library(knitr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(mosaic)
+library(sp)
+opts_chunk$set(fig.keep = "yes", fig.path = 'fig/')
+```
+
+# Synopsis
+* Storms and other severe weather events can cause both public health and economic
+problems for communities and municipalities. Many severe events can result in
+fatalities, injuries, and property damage, and preventing such outcomes to the extent
+possible is a key concern.
+* This project involves exploring the U.S. National Oceanic and Atmospheric
+Administration's [(NOAA)](http://www.ncdc.noaa.gov/) storm
+[database](http://www.ncdc.noaa.gov/stormevents/ftp.jsp). This database tracks 
+characteristics of major storms and weather events in the United States, including 
+when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+    + The events in the database start in the year 1950 and end in November 2011. 
+    In the earlier years of the database there are generally fewer events recorded, most 
+    likely due to a lack of good records. More recent years should be considered more complete.
+
+# Data procesing
+
+## Data source
+* The [data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) 
+come in the form of a comma-separated-value file compressed via the bzip2 algorithm to 
+reduce its size.
+    + There is also some 
+    documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf) 
+    of the data available.
+
+***
+## Data Loading
+
+The events in the database start in the year 1950 and end in November 2011. 
+In the earlier years of the database, there are fewer events recorded, 
+most likely due to a lack of good records. More recent years should be 
+considered more complete.
+
+```{r DataLoading, echo=TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", 
+              destfile = "repdata-data-StormData.csv.bz2", method = "auto",  mode = "wb")
+data <- read.csv(bzfile("repdata-data-StormData.csv.bz2"), stringsAsFactors = FALSE)
+```
+
+## Selection of the columns we are going to work with 
+
+We will select only columns we care about to speed up our processing time   
+
+## Eliminate espaces and other special caracters from event types  
+
+## Monetary fields
+
+Monetary data is not completely numeric.
+There are two columns in the data set to represent monetary damage: PROPDMG and CROPDMG. 
+However, these are in units defined in the PROPDMGEXP and CROPDMGEXP columns, respectively. 
+So we'll first need to define a new column that is for total damages by event in a consistent set of units
+
+## Event type categorization
+
+Let's have a look to see whatcan be done to consolidate or categorize the event types. 
+Naming is very inconsistent and doesn't follow a pattern or naming convention. 
+I am going to reduce the event categories by classifying 
+the event types. Let's use "grep" of a few keywords in the event type names 
+to try to scan the naming and have a better consolidated view of the data 
+classification in the database. 
+We will add a category column to the database with the results of the "grep". 
+I don't expect this categorization to be perfect, but it should be a strong 
+first approximation. In many cases, the event name denotes two or more 
+natural events combined causing the damage and in those cases, we will cast 
+to just one category.
+Additionally, we should keep the "other" category under 10% for good results. 
+
+***
+
+*Let's try to accumulate all the impact specific events have in human life and economical.* 
+*After looking at the naming in the database i can see up to 20 different ways a tornado could be called*
+
+```{r DataTidying, echo=TRUE}
+# Selection of the columns we are going to work with
+data <- data %>% subset(select = c( "EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", 
+                                    "CROPDMG", "CROPDMGEXP")) %>%
+# Eliminate espaces and other special caracters from event types  
+                 mutate(EVTYPE = tolower(EVTYPE), 
+                        EVTYPE = gsub("[[:blank:]]", "", EVTYPE, fixed = TRUE),
+                        PERSONALHARM = FATALITIES + INJURIES,
+                        PROPDMGEXP = tolower(PROPDMGEXP), 
+                        CROPDMGEXP = tolower(CROPDMGEXP)) %>%
+# Monetary fields transformation                
+                 mutate(TOTALPROPDMG = ifelse(PROPDMGEXP == "k", PROPDMG*1000, 
+                                              ifelse(PROPDMGEXP == "m", PROPDMG*1000000, 
+                                                     ifelse(PROPDMGEXP == "b", PROPDMG*1000000000, 
+                                                            ifelse(PROPDMGEXP == "h", PROPDMG*100, PROPDMG))))) %>%
+                 mutate(TOTALCROPDMG = ifelse(CROPDMGEXP == "k", CROPDMG*1000, 
+                                              ifelse(CROPDMGEXP == "m", CROPDMG*1000000, 
+                                                     ifelse(CROPDMGEXP == "b", CROPDMG*1000000000, 
+                                                            ifelse(CROPDMGEXP == "h", CROPDMG*100, CROPDMG))))) %>%
+                 mutate(TOTALDMG = TOTALCROPDMG + TOTALPROPDMG) %>%
+# Event type categorization  
+                 mutate( EVCAT = derivedFactor( 
+                        "cold" = grepl("chill|cold|cool|hypothermia|lowtemp|sleet", EVTYPE),
+                        "heat" = grepl("heat|hightemp|hot|warm|hyperth", EVTYPE), 
+                        "drought" = grepl("belownormalprecip|dry|drie|drought", EVTYPE),
+                        "fire" = grepl("fire|smoke", EVTYPE),
+                        "flood" = grepl("current|dam|drown|flood|floood|fld|erosi|landslump|
+                                        water|river|slide|lake", EVTYPE),
+                        "fog" = grepl("fog|vog", EVTYPE),
+                        "iceandsnow" = grepl("avalanc|blizzard|glaze|hail|ice|icy|freez|frost|
+                                             wint|snow", EVTYPE), 
+                        "lightning" = grepl("light|lignt", EVTYPE),
+                        "rain" = grepl("depres|drizzle|shower|precip|rain|ripcurrent|stream|
+                                       storm|seiche|swell|torrent|wet", EVTYPE),
+                        "sea" = grepl("beach|coast|cstl|highwaves|marine|roguewave|sea|surf|tide|
+                                      tidal|tsuna", EVTYPE),
+                        "thunderstm" = grepl("tstm|thunder", EVTYPE),
+                        "tornado" = grepl("burst|cloud|floyd|funnel|gust|hurricane|spout|torn|
+                                          turbul|typhoon|wall", EVTYPE),  
+                        "quake" = grepl("quake", EVTYPE),
+                        "wind" = grepl("wind|wnd", EVTYPE), .method = "first", .default = "other"))
+                    
+```
+
+#Results
+
+There are 2 questions we need to answer
+
+## Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+Here we can see the major 14 event categories that aggregate events by similarity and the personal injury and fatalities that they create. 
+The first table explains the injuries, the second table explains the fatalities and the last one is 
+the aggregate.
+
+```{r DataExploration1, echo=TRUE}
+arrange(aggregate(INJURIES ~ EVCAT, data = data, sum), desc(INJURIES))
+arrange(aggregate(FATALITIES ~ EVCAT, data = data, sum), desc(FATALITIES))
+arrange(aggregate(PERSONALHARM ~ EVCAT, data = data , sum),desc(PERSONALHARM))
+```
+
+Let's plot to appreciate the data, we can see that tornadoes are by far the most mortal events in the USA
+
+```{r DataPlot1, echo=TRUE, fig.height=7, fig.width=7}
+opts_chunk$set(fig.keep = "yes", fig.path = 'fig/')
+
+g <- ggplot(data, aes(x = EVCAT,  y = PERSONALHARM, fill = EVCAT))
+g <- g + geom_bar(stat = "identity") +
+  xlab("Category of event") + 
+  ylab(expression(" Fatalities and Injuries" )) +
+  scale_fill_discrete(name = "Type of event") +
+  theme(legend.position = "Type of event", axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ggtitle("Personal damage caused by major disasters")
+g
+```
+
+## Across the United States, which types of events have the greatest economic consequences?
+
+Here we can see the major 14 event categories and the and the property and crop damage they create.
+The first table explains the property damage caused by the events and the second one explains 
+the crop damage caused. The third table is the aggregated of the previous ones
+
+```{r DataExploration2, echo=TRUE}
+arrange(aggregate(TOTALPROPDMG ~ EVCAT, data = data , sum),desc(TOTALPROPDMG)) 
+arrange(aggregate(TOTALCROPDMG ~ EVCAT, data = data , sum),desc(TOTALCROPDMG)) 
+arrange(aggregate(TOTALDMG ~ EVCAT, data = data , sum),desc(TOTALDMG)) 
+#Easier in the eyes in Billion dollars
+data$TOTALPROPDMG <- data$TOTALPROPDMG /(10 ^ 9)
+data$TOTALCROPDMG <- data$TOTALCROPDMG /(10 ^ 9)
+data$TOTALDMG <- data$TOTALDMG /(10 ^ 9)
+```
+
+Let's plot to appreciate the data, here we can see that flood related events are more devastating followed closely by tornadoes.
+
+```{r DataPlot2, echo=TRUE, fig.height=7, fig.width=7}
+opts_chunk$set(fig.keep = "yes", fig.path = 'fig/')
+
+g <- ggplot(data, aes(x = EVCAT,  y = TOTALDMG, fill = EVCAT))
+g <- g + geom_bar(stat = "identity") + 
+  xlab("Category of event") + 
+  ylab(expression(" Economic damage in $Billions" )) +
+  scale_fill_discrete(name = "Type of event") +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ggtitle("Economic damage caused by major disasters")
+g
+```
