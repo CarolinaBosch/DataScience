@@ -1,0 +1,145 @@
+---
+title: "Statistical Interference Course Project 2"
+author: "Carolina A Tarraga"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    fig_caption: yes
+    fig_height: 6
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+subtitle: Perform basic exploratory data analyses in the ToothGrowth data in the R
+  package
+---
+
+```{r Libraries, message=FALSE, warning=FALSE, include=FALSE}
+
+library(knitr)
+library(ggplot2)
+library(datasets)
+
+opts_chunk$set(fig.keep = "yes", fig.path = 'fig/')
+```
+
+#Overview
+
+We need to load and perform basic exploratory analysis in the toothgrowt package. We do have limited knowledge of this package so we will go step by step until we get familiar with it. 
+We will provide a basic summary of the data. We will use confidence intervals and/or hypothesis tests to compare tooth growth by supplement and dose. We will also state our conclusions and the assumptions needed for our conclusions.
+
+#Exploratory Data Analysis
+
+We first begin with calling the ToothGrowth dataset and assigning it to the variable data.TG. A summary of the dataset can be quickly computed
+
+```{r}
+data(ToothGrowth)
+dataTG = ToothGrowth
+```
+
+##Number of rows
+```{r}
+nrow(dataTG)
+```
+
+##Data distribution
+```{r}
+table(dataTG$supp,dataTG$dose)
+```
+
+##First rows of the table
+```{r}
+head(dataTG)
+```
+
+##Summary
+```{r}
+summary(dataTG)
+summary(lm(dataTG$len~dataTG$dose))
+```
+
+
+We can see that there is a column len that we are to assume that is tooth length, supp is supplement, OJ is orange juice and VC is vitamin C.
+
+There are 30 observations for OJ and 30 for VC. OJ or VC was given in different doses to individuals to understand the impact in their toothgowth. 
+
+##Box Plot
+
+Let's create some quick box plots to appreciate the data more in deep
+
+```{r boxplot, echo=TRUE, fig.height=7, fig.width=7 }
+boxplot(len ~ supp * dose, data = dataTG, col = (c("purple", "green")), ylab = "Tooth Length", xlab = " Supplement and Dose", main = "Comparing Tooth Growth between different supplements and different dosis")
+#legend('bottomright', c("OJ: Orange juice", "VC: Ascorbic acid"), fill = c("purple","green"),bty = "n")
+```
+
+We can appreciate a few points:
+
+1) Looks like both supplements have a possitive impact in toothgrowth
+2) At low doses, OJ seems more effective
+3) at high doses OJ and VC seem to start equalizing
+
+Let's have a look at the conditional plot
+
+```{r conditional, echo=TRUE, fig.height=7, fig.width=7 }
+# Conditional Plot
+coplot(len ~ dose|supp, data = dataTG, panel = panel.smooth, col = par("fg"),
+       xlab = "Dose", ylab = "Tooth Length", main = "Conditional plot len~dose") 
+```
+
+##Confidence intervals and T tests
+
+Let's have a look at the confidence intervals
+
+```{r}
+confint(lm(dataTG$len~dataTG$dose))
+```
+
+```{r}
+confint(lm(dataTG$len~dataTG$dose + dataTG$supp))
+```
+
+Let's check out T tests
+
+```{r}
+t.test(dataTG$len, dataTG$dose)
+```
+
+> P-Value < 0.05 
+> confidence interval: 15.66453 19.62881
+
+We can assume that the length of the tooth is impacted by the dose of the supplements
+
+
+```{r}
+t.test(len ~ supp, data = dataTG)
+```
+
+> P-Value = 0.06 (P is greater than 0.05)  
+> Confidence Interval: -0.17 to 7.57 (CI does cross 0)  
+
+Given the P-Value is greater than 0.05 and the confidence interval does cross 0, we need to reject this hipotesis. 
+
+#Conclusions and assumptions
+
+There is an extremely close relationship between confidence intervals and hypothesis testing. When a 95% confidence interval is constructed, all values in the interval are considered plausible values for the parameter being estimated. Values outside the interval are rejected as relatively implausible. If the value of the parameter specified by the null hypothesis is contained in the 95% interval then the null hypothesis cannot be rejected at the 0.05 level. If the value specified by the null hypothesis is not in the interval then the null hypothesis can be rejected at the 0.05 level. If a 99% confidence interval is constructed, then values outside the interval are rejected at the 0.01 level.
+
+Reviewing the t.test data, the following conclusions can be made:
+
+    1) The increase in dosage of both supplements has positive impact tooth growth. P-Value < 0.05
+    2) The type of supplement by itself does not affect tooth growth due to P-value > 0.05.
+    3) Orange juice has stronger impact in tooth growth than vitamin C for low doses
+    4) However, for high doses, the impact by Orange Juice and Vitamin C is similar.
+
+For both OJ and Vitamin C, we rejected the null hypothesis (tooth growth is not effected by increasing levels of vitamin c and OJ) and accept the alternative hypothesis (tooth growth increases with increasing doses of vitamin C and OJ) based on the results of the t-test. In both cases, the t-test indicated that the sample mean of the higher concentration of dose (2.0 mg) fell outside the 95% confidence interval.
+
+And the following assupmtions:
+
+    1) There is unequal variance. 
+    2) The sample is representative of the population.
+    3) The distribution of the samples means follow CLT and is normal and represents the population mean 
+    4) The above conclusions assume that the data are not paired.
+    
+    
